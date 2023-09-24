@@ -328,9 +328,7 @@ function Module.GetData(Player, StoreString, JustJoined)
 		return Store:GetAsync(DatastoreKey..Player.UserId)
 	end)
 	if JustJoined and Data and Data.SessionJobId then
-		local _Success
-		local _Data = {}
-		_Success, _Data = Retry(
+		local _Success, _Data = Retry(
 			RETRY_GET_ASYNC_YIELD, 
 			MAX_GET_ASYNC_ATTEMPTS, 
 			function()
@@ -345,6 +343,9 @@ function Module.GetData(Player, StoreString, JustJoined)
 	end
 	if Success then
 		print("Successfully retrieved data")
+	elseif type(Data) == "string" then
+		warn("Shit")
+		return
 	end
 	if Data then
 		MergeReplicatorTemplate(Deserialize(Data), STORES[StoreString].Default)
