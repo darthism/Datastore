@@ -46,6 +46,14 @@ local function SizeOfTable(Table)
 	end
 	return Count
 end
+local function GetUnsplitPath(Array)
+	local Buffer = ""
+	for _, Value in Array do
+		Buffer..=(Value.."/")
+	end
+	Buffer = string.sub(Buffer, 0, -2)
+	return Buffer
+end
 local function WaitForRequestBudget(Request)
 	while DataStoreService:GetRequestBudgetForRequestType(Request) < MAX_GET_ASYNC_ATTEMPTS + 1 do
 		task.wait()
@@ -207,6 +215,7 @@ local STORES = {
 	},
 }
 local UniqueTypeKey = "Senpai"
+local DatastoreKey = "Player_"
 local function Retry(Attempts, Func, Attempt)
 	Attempt = Attempt or 1
 	local Args = {pcall(Func)}
@@ -286,8 +295,10 @@ Module.PlayersData = PlayersData
 if IsClient then
 	local STORE_STRING = 1
 	local Player = Players.LocalPlayer
+	local DataChangedSignal = Signal.new()
 	SyncData.OnClientEvent:Connect(function(Path, Data, StoreString)
 		SetTablePath(PlayersData[Player.Name][StoreString], Path, Data)
+		DataChangedSignal:Fire(GetUnsplitPath(Path))
 	end)
 	Players.PlayerAdded:Connect(function(Player)
 		PlayersData[Player.Name] = {}
@@ -298,7 +309,10 @@ if IsClient then
 	Players.PlayerRemoving:Connect(function(Player)
 		PlayersData[Player.Name] = nil
 	end)
-	return Module
+	return {
+		PlayersData = PlayersData,
+		DataChangedSignal = DataChangedSignal,
+	}
 end
 for _, Store in STORES do
 	AttachPathsToReplicators(Store.Default)
@@ -307,7 +321,7 @@ function Module.GetData(Player, StoreString)
 	WaitForRequestBudget(Enum.DataStoreRequestType.GetAsync)
 	local Store = STORES[StoreString].Store
 	local Success, Data = Retry(MAX_GET_ASYNC_ATTEMPTS, function()
-		return Store:GetAsync("Player_"..Player.UserId)
+		return Store:GetAsync(DatastoreKey..Player.UserId)
 	end)
 	if Success then
 		print("Successfully retrieved data")
@@ -332,7 +346,7 @@ function Module.UpdateData(Player, StoreString)
 	local Store = STORES[StoreString].Store
 	local Success, Value = pcall(function()
 		local Data = PlayersData[Player.Name][StoreString]
-		Store:UpdateAsync("Player_"..Player.UserId, function(OldData)
+		Store:UpdateAsync(DatastoreKey..Player.UserId, function(OldData)
 			local PreviousData = OldData or {DataId = 1}
 			local CurrentData = PlayersData[Player.Name][StoreString]
 			if CurrentData.DataId == PreviousData.DataId then
