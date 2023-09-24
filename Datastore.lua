@@ -11,6 +11,7 @@ local MAX_GET_ASYNC_ATTEMPTS = 6
 local Success, Value = 1, 2
 local AutoSaveTime
 local IsClient = RunService:IsClient()
+local JobId = game.JobId
 local function SetUnion(A, B)
 	local Union = {}
 	for _, Value in A do
@@ -331,6 +332,7 @@ function Module.GetData(Player, StoreString)
 		Data = DeepCopy(STORES[StoreString].Default)
 	end
 	Data.DataId = Data.DataId or 1
+	Data.JobId = JobId
 	Data = Data or DeepCopy(STORES[StoreString].Default)
 	if not PlayersData[Player.Name] then
 		PlayersData[Player.Name] = {}
@@ -346,12 +348,17 @@ function Module.UpdateData(Player, StoreString)
 	local Success, Value = pcall(function()
 		local Data = PlayersData[Player.Name][StoreString]
 		Store:UpdateAsync(DatastoreKey..Player.UserId, function(OldData)
-			local PreviousData = OldData or {DataId = 1}
+			local PreviousData = OldData or DeepCopy(STORES[StoreString].Default)
+			PreviousData.DataId = PreviousData.DataId or 1
 			local CurrentData = PlayersData[Player.Name][StoreString]
+			if not PreviousData.JobId or PreviousData.JobId == JobId then
+				PreviousData.SessionId = JobId
+				return PreviousData
+			end
 			if CurrentData.DataId == PreviousData.DataId then
 				CurrentData.DataId += 1
 				return Serialize(CurrentData)
-			end
+			end	
 			return nil
 		end)
 	end)
