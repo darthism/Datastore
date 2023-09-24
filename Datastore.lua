@@ -293,7 +293,6 @@ local DataChangedSignals = {}
 local Module = {}
 Module.PlayersData = PlayersData
 if IsClient then
-	local STORE_STRING = 1
 	local Player = Players.LocalPlayer
 	local DataChangedSignal = Signal.new()
 	SyncData.OnClientEvent:Connect(function(Path, Data, StoreString)
