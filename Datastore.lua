@@ -352,7 +352,7 @@ function Module.UpdateData(Player, StoreString)
 			PreviousData.DataId = PreviousData.DataId or 1
 			local CurrentData = PlayersData[Player.Name][StoreString]
 			if not PreviousData.JobId or PreviousData.JobId == JobId then
-				PreviousData.SessionId = JobId
+				PreviousData.JobId = JobId
 				return PreviousData
 			end
 			if CurrentData.DataId == PreviousData.DataId then
