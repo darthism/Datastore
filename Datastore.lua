@@ -8,6 +8,7 @@ local SyncData = ReplicatedSotrage
 					:WaitForChild("SyncData")
 local MARGIN_OF_SAFETY = 1.25
 local MAX_GET_ASYNC_ATTEMPTS = 6
+local RETRY_GET_ASYNC_YIELD = 1
 local Success, Value = 1, 2
 local AutoSaveTime
 local IsClient = RunService:IsClient()
@@ -217,7 +218,7 @@ local STORES = {
 }
 local UniqueTypeKey = "Senpai"
 local DatastoreKey = "Player_"
-local function Retry(Attempts, Func, Attempt)
+local function Retry(YieldTime, Attempts, Func, Attempt)
 	Attempt = Attempt or 1
 	local Args = {pcall(Func)}
 	if Attempt == Attempts then
@@ -226,7 +227,10 @@ local function Retry(Attempts, Func, Attempt)
 	if Args[Success] then
 		return unpack(Args)
 	else
-		return Retry(Attempts, Func, Attempt + 1)
+		if YieldTime then
+			task.wait(YieldTime)
+		end
+		return Retry(YieldTime, Attempts, Func, Attempt + 1)
 	end
 end
 local function WrapSerializedValue(Serialized, Type)
@@ -317,13 +321,29 @@ end
 for _, Store in STORES do
 	AttachPathsToReplicators(Store.Default)
 end
-function Module.GetData(Player, StoreString)
+function Module.GetData(Player, StoreString, JustJoined)
 	WaitForRequestBudget(Enum.DataStoreRequestType.GetAsync)
 	local Store = STORES[StoreString].Store
-	local Success, Data = Retry(MAX_GET_ASYNC_ATTEMPTS, function()
+	local Success, Data = Retry(nil, MAX_GET_ASYNC_ATTEMPTS, function()
 		return Store:GetAsync(DatastoreKey..Player.UserId)
 	end)
-	if Success then
+	if JustJoined and Data and Data.SessionJobId then
+		local _Success
+		local _Data = {}
+		_Success, _Data = Retry(
+			RETRY_GET_ASYNC_YIELD, 
+			MAX_GET_ASYNC_ATTEMPTS, 
+			function()
+				local NewData = Store:GetAsync(DatastoreKey..Player.UserId)
+				return not Data.SessionJobId
+			end
+		)
+		if not _Success then
+			Data = nil
+			warn("Error while attempting to session lock")
+		end
+	end
+	if Success and Data then
 		print("Successfully retrieved data")
 	end
 	if Data then
@@ -332,7 +352,7 @@ function Module.GetData(Player, StoreString)
 		Data = DeepCopy(STORES[StoreString].Default)
 	end
 	Data.DataId = Data.DataId or 1
-	Data.JobId = JobId
+	Data.SessionJobId = JobId
 	Data = Data or DeepCopy(STORES[StoreString].Default)
 	if not PlayersData[Player.Name] then
 		PlayersData[Player.Name] = {}
@@ -346,15 +366,9 @@ function Module.UpdateData(Player, StoreString)
 	WaitForRequestBudget(Enum.DataStoreRequestType.UpdateAsync) -- Backup that will most likely never yield
 	local Store = STORES[StoreString].Store
 	local Success, Value = pcall(function()
-		local Data = PlayersData[Player.Name][StoreString]
 		Store:UpdateAsync(DatastoreKey..Player.UserId, function(OldData)
-			local PreviousData = OldData or DeepCopy(STORES[StoreString].Default)
-			PreviousData.DataId = PreviousData.DataId or 1
+			local PreviousData = OldData or {DataId = 1}
 			local CurrentData = PlayersData[Player.Name][StoreString]
-			if not PreviousData.JobId or PreviousData.JobId == JobId then
-				PreviousData.JobId = JobId
-				return PreviousData
-			end
 			if CurrentData.DataId == PreviousData.DataId then
 				CurrentData.DataId += 1
 				return Serialize(CurrentData)
@@ -410,7 +424,7 @@ Players.PlayerAdded:Connect(function(Player)
 	DataChangedSignals[Player.Name] = {}
 	for StoreString, _ in STORES do
 		DataChangedSignals[Player.Name][StoreString] = Signal.new()
-		Module.GetData(Player, StoreString)
+		Module.GetData(Player, StoreString, true)
 		UpdateReplicators(PlayersData[Player.Name][StoreString])	
 	end
 end)
@@ -419,6 +433,7 @@ Players.PlayerRemoving:Connect(function(Player)
 	for StoreString, _ in STORES do
 		DataChangedSignals[Player.Name][StoreString]:DisconnectAll()
 		DataChangedSignals[Player.Name][StoreString] = nil
+		PlayersData[Player.Name][StoreString].SessionJobId = nil
 		Module.UpdateData(Player, StoreString)	
 	end
 	DataChangedSignals[Player.Name] = nil
