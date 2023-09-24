@@ -46,6 +46,11 @@ local function SizeOfTable(Table)
 	end
 	return Count
 end
+local function WaitForRequestBudget(Request)
+	while DataStoreService:GetRequestBudgetForRequestType(Request) < MAX_GET_ASYNC_ATTEMPTS + 1 do
+		task.wait()
+	end
+end
 --- /// Signal
 local Connection = {}
 Connection.__index = Connection
@@ -299,6 +304,7 @@ for _, Store in STORES do
 	AttachPathsToReplicators(Store.Default)
 end
 function Module.GetData(Player, StoreString)
+	WaitForRequestBudget(Enum.DataStoreRequestType.GetAsync)
 	local Store = STORES[StoreString].Store
 	local Success, Data = Retry(MAX_GET_ASYNC_ATTEMPTS, function()
 		return Store:GetAsync("Player_"..Player.UserId)
@@ -322,6 +328,7 @@ function Module.GetData(Player, StoreString)
 	return Success, Data
 end
 function Module.UpdateData(Player, StoreString)
+	WaitForRequestBudget(Enum.DataStoreRequestType.UpdateAsync) -- Backup that will most likely never yield
 	local Store = STORES[StoreString].Store
 	local Success, Value = pcall(function()
 		local Data = PlayersData[Player.Name][StoreString]
@@ -334,7 +341,6 @@ function Module.UpdateData(Player, StoreString)
 			end
 			return nil
 		end)
-		-- Store:SetAsync(Player.UserId, Serialize(Data))
 	end)
 end
 function Module.RawGetData(PlayerName, StoreString, Path)
