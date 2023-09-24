@@ -41,7 +41,7 @@ local function GetTablePath(Table, Path)
 end
 local function SizeOfTable(Table)
 	local Count = 0
-	for _, _, in Table do
+	for _, _ in Table do
 		Count += 1
 	end
 	return Count
@@ -361,8 +361,8 @@ task.spawn(function()
 		local PlayerCount = #Players:GetPlayers()
 		if CurrentBudget ~= Budget then
 			Budget = CurrentBudget
-			print(AutoSaveTime)
 			AutoSaveTime = math.ceil(((PlayerCount * StoresSize * 6) / (PlayerCount + 6)) * MARGIN_OF_SAFETY)
+			print(AutoSaveTime)
 		end
 		task.wait()
 	end
@@ -401,5 +401,6 @@ game:BindToClose(function()
 end)
 return {
 	Service = Module,
+	PlayersData = PlayersData,
 	DataChangedSignals = DataChangedSignals,
 }
