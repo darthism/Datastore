@@ -12,7 +12,7 @@ local RETRY_GET_ASYNC_YIELD = 1
 local Success, Value = 1, 2
 local AutoSaveTime
 local IsClient = RunService:IsClient()
-l
+
 local function SetUnion(A, B)
 	local Union = {}
 	for _, Value in A do
