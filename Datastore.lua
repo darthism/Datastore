@@ -12,6 +12,7 @@ local RETRY_GET_ASYNC_YIELD = 1
 local Success, Value = 1, 2
 local AutoSaveTime
 local IsClient = RunService:IsClient()
+l
 local function SetUnion(A, B)
 	local Union = {}
 	for _, Value in A do
@@ -351,7 +352,7 @@ function Module.GetData(Player, StoreString, JustJoined)
 		Data = DeepCopy(STORES[StoreString].Default)
 	end
 	Data.DataId = Data.DataId or 1
-	Data.SessionJobId = JobId
+	Data.SessionBool = true
 	Data = Data or DeepCopy(STORES[StoreString].Default)
 	if not PlayersData[Player.Name] then
 		PlayersData[Player.Name] = {}
@@ -432,7 +433,7 @@ Players.PlayerRemoving:Connect(function(Player)
 	for StoreString, _ in STORES do
 		DataChangedSignals[Player.Name][StoreString]:DisconnectAll()
 		DataChangedSignals[Player.Name][StoreString] = nil
-		PlayersData[Player.Name][StoreString].SessionJobId = nil
+		PlayersData[Player.Name][StoreString].SessionBool = false
 		Module.UpdateData(Player, StoreString)	
 	end
 	DataChangedSignals[Player.Name] = nil
