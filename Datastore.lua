@@ -401,6 +401,7 @@ Players.PlayerRemoving:Connect(function(Player)
 		DataChangedSignals[Player.Name][StoreString] = nil
 		Module.UpdateData(Player, StoreString)	
 	end
+	DataChangedSignals[Player.Name] = nil
 end)
 game:BindToClose(function()
 	wait(1)
