@@ -355,7 +355,7 @@ function Module.RawUpdateData(PlayerName, StoreString, Path, Value)
 			Data.Change(Value)
 		end
 	else
-		SetTablePath(PlayerName, StoreString, Path)
+		SetTablePath(PlayerName, StoreString, Split)
 	end
 	DataChangedSignals[PlayerName][StoreString]:Fire(Path)
 end
