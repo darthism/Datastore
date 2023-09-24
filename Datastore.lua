@@ -327,7 +327,7 @@ function Module.GetData(Player, StoreString, JustJoined)
 	local Success, Data = Retry(nil, MAX_GET_ASYNC_ATTEMPTS, function()
 		return Store:GetAsync(DatastoreKey..Player.UserId)
 	end)
-	if JustJoined and Data and Data.SessionJobId then
+	if JustJoined and Data and Data.SessionBool then
 		local _Success
 		local _Data = {}
 		_Success, _Data = Retry(
@@ -343,25 +343,25 @@ function Module.GetData(Player, StoreString, JustJoined)
 			warn("Error while attempting to session lock")
 		end
 	end
-	if Success and Data then
-		print("Successfully retrieved data")
+	if Success then
+		if Data then
+			print("Successfully retrieved data")
+			MergeReplicatorTemplate(Deserialize(Data), STORES[StoreString].Default)
+		else
+			Data = DeepCopy(STORES[StoreString].Default)
+		end
+		Data.DataId = Data.DataId or 1
+		Data.SessionBool = true
+		Data = Data or DeepCopy(STORES[StoreString].Default)
+		if not PlayersData[Player.Name] then
+			PlayersData[Player.Name] = {}
+		end
+		if not PlayersData[Player.Name][StoreString] then
+			PlayersData[Player.Name][StoreString] = Data
+		end
+		return Success, Data
 	end
-	if Data then
-		MergeReplicatorTemplate(Deserialize(Data), STORES[StoreString].Default)
-	else
-		Data = DeepCopy(STORES[StoreString].Default)
 	end
-	Data.DataId = Data.DataId or 1
-	Data.SessionJobId = JobId
-	Data = Data or DeepCopy(STORES[StoreString].Default)
-	if not PlayersData[Player.Name] then
-		PlayersData[Player.Name] = {}
-	end
-	if not PlayersData[Player.Name][StoreString] then
-		PlayersData[Player.Name][StoreString] = Data
-	end
-	return Success, Data
-end
 function Module.UpdateData(Player, StoreString)
 	WaitForRequestBudget(Enum.DataStoreRequestType.UpdateAsync) -- Backup that will most likely never yield
 	local Store = STORES[StoreString].Store
@@ -433,7 +433,7 @@ Players.PlayerRemoving:Connect(function(Player)
 	for StoreString, _ in STORES do
 		DataChangedSignals[Player.Name][StoreString]:DisconnectAll()
 		DataChangedSignals[Player.Name][StoreString] = nil
-		PlayersData[Player.Name][StoreString].SessionJobId = nil
+		PlayersData[Player.Name][StoreString].SessionBool = nil
 		Module.UpdateData(Player, StoreString)	
 	end
 	DataChangedSignals[Player.Name] = nil
