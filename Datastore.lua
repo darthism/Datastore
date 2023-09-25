@@ -327,7 +327,7 @@ function Module.GetData(Player, StoreString, JustJoined)
 	local Success, Data = Retry(nil, MAX_GET_ASYNC_ATTEMPTS, function()
 		return Store:GetAsync(DatastoreKey..Player.UserId)
 	end)
-	if JustJoined and Data and Data.SessionJobId then
+	if JustJoined and Data and Data.SessionBool then
 		local _Success, _Data = Retry(
 			RETRY_GET_ASYNC_YIELD, 
 			MAX_GET_ASYNC_ATTEMPTS, 
@@ -404,7 +404,7 @@ RunService.Heartbeat:Connect(function()
 	if CurrentBudget ~= Budget then
 		Budget = CurrentBudget
 		AutoSaveTime = math.ceil(((PlayerCount * StoresSize * 6) / (PlayerCount + 6)) * MARGIN_OF_SAFETY)
-		print(AutoSaveTime)
+		-- print(AutoSaveTime)
 	end
 	if not AutoSaveTime then return end
 	if os.clock() - Clock > AutoSaveTime then
