@@ -196,8 +196,8 @@ local function DeepCopy(Table, StoreString)
 				else
 					CopiedObject = Value.Object
 				end
-				local CopyReplicator = ReplicatorWrapper(CopiedObject)
-				CopyReplicator.Path = Value.Path
+				local ReplicatorCopy = ReplicatorWrapper(CopiedObject)
+				ReplicatorCopy.Path = Value.Path
 			end
 		end
 		Copy[Key] = Value
@@ -239,8 +239,8 @@ local function MergeReplicatorTemplate(Table, StoreString, Descendant)
 	for Key, Value in ShadowDescendant do
 		if type(Value) == "table" then
 			if tostring(Value) == "Replicator" then
-				local CopyReplicator = unpack(DeepCopy({Value}, StoreString))
-				SetTablePath(Table, Value.Path, CopyReplicator)
+				local ReplicatorCopy = unpack(DeepCopy({Value}, StoreString))
+				SetTablePath(Table, Value.Path, ReplicatorCopy)
 				if type(Value.Object) == "table" then
 					MergeReplicatorTemplate(Table, StoreString, Value.Object)
 				end
@@ -504,7 +504,7 @@ end)
 for _, Player in Players:GetPlayers() do
 	OnPlayerAdded(Player)
 end
-task.wait(0.5)
+task.wait(2)
 CanStart = true
 return {
 	Service = Module,
