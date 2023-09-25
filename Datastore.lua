@@ -133,7 +133,7 @@ local function SizeOfTable(Table)
 	return Count
 end
 local function WaitForRequestBudget(Request)
-	while DataStoreService:GetRequestBudgetForRequestType(Request) < MAX_GET_ASYNC_ATTEMPTS + 1 do
+	while DataStoreService:GetRequestBudgetForRequestType(Request) < math.max(MAX_GET_ASYNC_ATTEMPTS + 1, #Players:GetPlayers() + 1) do
 		task.wait()
 	end
 end
