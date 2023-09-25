@@ -383,9 +383,7 @@ function Module.UpdateData(Player, StoreString, IsLeaving)
 		local PreviousData = OldData or {DataId = 1}
 		local CurrentData = PlayersData[Player.Name][StoreString]
 		if CurrentData.DataId == PreviousData.DataId then
-			if IsLeaving then
-				CurrentData.DataId += 1
-			end
+			CurrentData.DataId += 1
 			return Serialize(CurrentData)
 		end	
 		return nil
@@ -425,6 +423,7 @@ RunService.Heartbeat:Connect(function()
 	if not AutoSaveTime then 
 		return 
 	end
+	print(AutoSaveTime)
 	if os.clock() - Clock > AutoSaveTime then
 		Clock = os.clock()
 		for _, PlayerObject in Threads do
