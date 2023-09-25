@@ -184,7 +184,6 @@ local ReplicatorWrappers = {
 local function DeepCopy(Table, StoreString)
 	local ReplicatorWrapper = ReplicatorWrappers[StoreString] or CreateReplicator
 	local Copy = {}
-	print(debug.traceback())
 	for Key, Value in Table do
 		if type(Value) == "table" then
 			if not (tostring(Value) == "Replicator") then
