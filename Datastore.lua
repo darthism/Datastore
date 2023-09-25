@@ -395,17 +395,25 @@ function Module.RawUpdateData(PlayerName, StoreString, Path, Value)
 	DataChangedSignals[PlayerName][StoreString]:Fire(Path)
 end
 local StoresSize = SizeOfTable(STORES)
-task.spawn(function()
-	local Budget = nil
-	while true do
-		local CurrentBudget = DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.UpdateAsync)
-		local PlayerCount = #Players:GetPlayers()
-		if CurrentBudget ~= Budget then
-			Budget = CurrentBudget
-			AutoSaveTime = math.ceil(((PlayerCount * StoresSize * 6) / (PlayerCount + 6)) * MARGIN_OF_SAFETY)
-			print(AutoSaveTime)
+local Budget = nil
+local Threads = {}
+local Clock = os.clock()
+RunService.Heartbeat:Connect(function()
+	local CurrentBudget = DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.UpdateAsync)
+	local PlayerCount = #Players:GetPlayers()
+	if CurrentBudget ~= Budget then
+		Budget = CurrentBudget
+		AutoSaveTime = math.ceil(((PlayerCount * StoresSize * 6) / (PlayerCount + 6)) * MARGIN_OF_SAFETY)
+		print(AutoSaveTime)
+	end
+	if not AutoSaveTime then return end
+	if os.clock() - Clock > AutoSaveTime then
+		Clock = os.clock()
+		for _, PlayerObject in Threads do
+			for _, CoroutineWrapper in PlayerObject do
+				coroutine.resume(CoroutineWrapper.Coroutine)
+			end 
 		end
-		task.wait()
 	end
 end)
 Players.PlayerAdded:Connect(function(Player)
@@ -422,6 +430,21 @@ Players.PlayerAdded:Connect(function(Player)
 			end
 		end
 	end
+	Threads[Player] = {}
+	for StoreString, _ in STORES do
+		Threads[Player][StoreString] = {
+			IsAlive = true
+		}
+		Threads[Player][StoreString].Coroutine = coroutine.create(function()
+			while true do
+				if not Threads[Player][StoreString].IsAlive then
+					return
+				end
+				Module.UpdateData(Player, StoreString)
+				coroutine.yield()
+			end
+		end)
+	end
 	DataChangedSignals[Player.Name] = {}
 	for StoreString, _ in STORES do
 		DataChangedSignals[Player.Name][StoreString] = Signal.new()
@@ -431,6 +454,12 @@ Players.PlayerAdded:Connect(function(Player)
 end)
 Players.PlayerRemoving:Connect(function(Player)
 	if not Player.Character then return end
+	local PlayerObject = Threads[Player]
+	for StoreString, _ in STORES do
+		PlayerObject[StoreString].IsAlive = false
+		coroutine.resume(PlayerObject[StoreString].Coroutine)
+	end
+	Threads[Player] = nil
 	for StoreString, _ in STORES do
 		DataChangedSignals[Player.Name][StoreString]:DisconnectAll()
 		DataChangedSignals[Player.Name][StoreString] = nil
