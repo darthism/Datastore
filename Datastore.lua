@@ -92,7 +92,6 @@ if IsClient then
 	end
 	local DataChangedSignal = Signal.new()
 	SyncData.OnClientEvent:Connect(function(Path, Data, StoreString)
-		print(PlayersData[StoreString])
 		SetTablePath(PlayersData[StoreString], Path, Data)
 		DataChangedSignal:Fire(GetUnsplitPath(Path))
 	end)
@@ -454,14 +453,18 @@ local function OnPlayerAdded(Player)
 	Threads[Player] = {}
 	for StoreString, _ in STORES do
 		Threads[Player][StoreString] = {
-			IsAlive = true
+			IsResumed = false,
+			IsAlive = true,
 		}
+		local CoroutineWrapper = Threads[Player][StoreString]
 		Threads[Player][StoreString].Coroutine = coroutine.create(function()
 			while true do
-				if not Threads[Player][StoreString].IsAlive then
+				if not CoroutineWrapper.IsAlive then
 					return
 				end
+				CoroutineWrapper.IsResumed = true
 				Module.UpdateData(Player, StoreString)
+				CoroutineWrapper.IsResumed = false
 				coroutine.yield()
 			end
 		end)
@@ -478,8 +481,12 @@ Players.PlayerRemoving:Connect(function(Player)
 	if not Player.Character then return end
 	local PlayerObject = Threads[Player]
 	for StoreString, _ in STORES do
-		PlayerObject[StoreString].IsAlive = false
-		coroutine.resume(PlayerObject[StoreString].Coroutine)
+		local CoroutineWrapper = PlayerObject[StoreString]
+		CoroutineWrapper.IsAlive = false
+		while CoroutineWrapper.IsResumed do
+			task.wait()
+		end
+		coroutine.resume(CoroutineWrapper.Coroutine)
 	end
 	task.wait()
 	Threads[Player] = nil
