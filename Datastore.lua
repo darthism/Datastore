@@ -6,23 +6,8 @@ local DataStoreService = game:GetService("DataStoreService")
 local SyncData = ReplicatedSotrage
 					:WaitForChild("Remotes")
 					:WaitForChild("SyncData")
-local MARGIN_OF_SAFETY = 1.25
-local MAX_GET_ASYNC_ATTEMPTS = 6
-local RETRY_GET_ASYNC_YIELD = 1
-local Success, Value = 1, 2
-local AutoSaveTime
 local IsClient = RunService:IsClient()
-
-local function SetUnion(A, B)
-	local Union = {}
-	for _, Value in A do
-		table.insert(Union, Value)
-	end
-	for _, Value in B do
-		table.insert(Union, Value)
-	end
-	return Union
-end
+local StoreStrings = {"Character", "Extra"}
 local function SetTablePath(Table, Path, Value)
 	local PathSize = #Path
 	local Temp = Table
@@ -33,33 +18,6 @@ local function SetTablePath(Table, Path, Value)
 		Temp = Temp[Value]					
 	end
 	Temp[Path[PathSize]] = Value
-end
-local function GetTablePath(Table, Path)
-	local Temp = Table
-	for Index, Value in Path do
-		Temp = Temp[Value]					
-	end
-	return Temp
-end
-local function SizeOfTable(Table)
-	local Count = 0
-	for _, _ in Table do
-		Count += 1
-	end
-	return Count
-end
-local function GetUnsplitPath(Array)
-	local Buffer = ""
-	for _, Value in Array do
-		Buffer..=(Value.."/")
-	end
-	Buffer = string.sub(Buffer, 0, -2)
-	return Buffer
-end
-local function WaitForRequestBudget(Request)
-	while DataStoreService:GetRequestBudgetForRequestType(Request) < MAX_GET_ASYNC_ATTEMPTS + 1 do
-		task.wait()
-	end
 end
 --- /// Signal
 local Connection = {}
@@ -121,6 +79,65 @@ function Signal:Wait()
 	return coroutine.yield()
 end
 --- /// 
+local PlayersData = {}
+local DataChangedSignals = {}
+if IsClient then
+	local function GetUnsplitPath(Array)
+		local Buffer = ""
+		for _, Value in Array do
+			Buffer..=(Value.."/")
+		end
+		Buffer = string.sub(Buffer, 0, -2)
+		return Buffer
+	end
+	local DataChangedSignal = Signal.new()
+	SyncData.OnClientEvent:Connect(function(Path, Data, StoreString)
+		print(PlayersData[StoreString])
+		SetTablePath(PlayersData[StoreString], Path, Data)
+		DataChangedSignal:Fire(GetUnsplitPath(Path))
+	end)
+	for _, StoreString in StoreStrings do
+		PlayersData[StoreString] = {}
+	end
+	return {
+		PlayersData = PlayersData,
+		DataChangedSignal = DataChangedSignal,
+	}
+end
+local MARGIN_OF_SAFETY = 1.25
+local MAX_GET_ASYNC_ATTEMPTS = 6
+local RETRY_GET_ASYNC_YIELD = 1
+local Success, Value = 1, 2
+local AutoSaveTime
+local function SetUnion(A, B)
+	local Union = {}
+	for _, Value in A do
+		table.insert(Union, Value)
+	end
+	for _, Value in B do
+		table.insert(Union, Value)
+	end
+	return Union
+end
+local function GetTablePath(Table, Path)
+	local Temp = Table
+	for Index, Value in Path do
+		Temp = Temp[Value]					
+	end
+	return Temp
+end
+local function SizeOfTable(Table)
+	local Count = 0
+	for _, _ in Table do
+		Count += 1
+	end
+	return Count
+end
+local function WaitForRequestBudget(Request)
+	while DataStoreService:GetRequestBudgetForRequestType(Request) < MAX_GET_ASYNC_ATTEMPTS + 1 do
+		task.wait()
+	end
+end
 local ReplicatorAnnotation = {}
 ReplicatorAnnotation.__tostring = function()
 	return "Replicator"
@@ -156,12 +173,33 @@ local function CreateReplicator(Object, StoreString)
 	}, ReplicatorAnnotation)
 	return self
 end
-local function DeepCopy(Table)
+local function CreateReplicatorWrapper(StringStore)
+	return function(Object)
+		return CreateReplicator(Object, StringStore)
+	end
+end
+local ReplicatorWrappers = {
+	Character = CreateReplicatorWrapper("Character"),
+	Extra = CreateReplicatorWrapper("Extra"),
+}
+local function DeepCopy(Table, StoreString)
+	local ReplicatorWrapper = ReplicatorWrappers[StoreString] or CreateReplicator
 	local Copy = {}
+	print(debug.traceback())
 	for Key, Value in Table do
 		if type(Value) == "table" then
 			if not (tostring(Value) == "Replicator") then
 				Value = DeepCopy(Value)
+			else
+				local CopiedObject = nil
+				if type(Value.Object) == "table" then
+					print(Value.Object)
+					CopiedObject = DeepCopy(Value.Object, StoreString)
+				else
+					CopiedObject = Value.Object
+				end
+				local CopyReplicator = ReplicatorWrapper(CopiedObject)
+				CopyReplicator.Path = Value.Path
 			end
 		end
 		Copy[Key] = Value
@@ -183,27 +221,8 @@ local function AttachPathsToReplicators(Table, Path)
 		end
 	end
 end
-local function MergeReplicatorTemplate(Table, Descendant)
-	for Key, Value in Descendant do
-		if type(Value) == "table" then
-			if tostring(Value) == "Replicator" then
-				SetTablePath(Table, Value.Path, Value)
-				if type(Value.Object) == "table" then
-					MergeReplicatorTemplate(Table, Value.Object)
-				end
-			else
-				MergeReplicatorTemplate(Table, Value)
-			end
-		end
-	end
-end
-local function CreateReplicatorWrapper(StringStore)
-	return function(Object)
-		return CreateReplicator(Object, StringStore)
-	end
-end
-local CreateReplicatorCharacter = CreateReplicatorWrapper("Character")
-local CreateReplicatorExtra = CreateReplicatorWrapper("Extra")
+local CreateReplicatorCharacter = ReplicatorWrappers.Character
+local CreateReplicatorExtra = ReplicatorWrappers.Extra
 local STORES = {
 	Character = {
 		Store = DataStoreService:GetDataStore("Character"),
@@ -216,6 +235,26 @@ local STORES = {
 		Default = {}
 	},
 }
+local function MergeReplicatorTemplate(Table, StoreString, Descendant)
+	local ReplicatorWrapper = ReplicatorWrappers[StoreString]
+	local ShadowDescendant = Descendant or STORES[StoreString].Default
+	for Key, Value in ShadowDescendant do
+		if type(Value) == "table" then
+			if tostring(Value) == "Replicator" then
+				local CopyReplicator = unpack(DeepCopy({Value}, StoreString))
+				SetTablePath(Table, Value.Path, CopyReplicator)
+				if type(Value.Object) == "table" then
+					MergeReplicatorTemplate(Table, StoreString, Value.Object)
+				end
+			else
+				MergeReplicatorTemplate(Table, StoreString, Value)
+			end
+		end
+	end
+	if not Descendant then
+		return Table
+	end
+end
 local UniqueTypeKey = "Senpai"
 local DatastoreKey = "Player_"
 local function Retry(YieldTime, Attempts, Func, Attempt)
@@ -288,39 +327,16 @@ local function Deserialize(Table)
 			else
 				Value = Deserialize(Table)
 			end
-			Unmodified[Key] = Value
 		end
+		Unmodified[Key] = Value
 	end
 	return Unmodified
-end
-local PlayersData = {}
-local DataChangedSignals = {}
-local Module = {}
-Module.PlayersData = PlayersData
-if IsClient then
-	local Player = Players.LocalPlayer
-	local DataChangedSignal = Signal.new()
-	SyncData.OnClientEvent:Connect(function(Path, Data, StoreString)
-		SetTablePath(PlayersData[Player.Name][StoreString], Path, Data)
-		DataChangedSignal:Fire(GetUnsplitPath(Path))
-	end)
-	Players.PlayerAdded:Connect(function(Player)
-		PlayersData[Player.Name] = {}
-		for StoreString, _ in STORES do
-			PlayersData[Player.Name][StoreString] = {}
-		end
-	end)
-	Players.PlayerRemoving:Connect(function(Player)
-		PlayersData[Player.Name] = nil
-	end)
-	return {
-		PlayersData = PlayersData,
-		DataChangedSignal = DataChangedSignal,
-	}
 end
 for _, Store in STORES do
 	AttachPathsToReplicators(Store.Default)
 end
+local Module = {}
+Module.PlayersData = PlayersData
 function Module.GetData(Player, StoreString, JustJoined)
 	WaitForRequestBudget(Enum.DataStoreRequestType.GetAsync)
 	local Store = STORES[StoreString].Store
@@ -333,7 +349,7 @@ function Module.GetData(Player, StoreString, JustJoined)
 			MAX_GET_ASYNC_ATTEMPTS, 
 			function()
 				local NewData = Store:GetAsync(DatastoreKey..Player.UserId)
-				return not Data.SessionJobId
+				return not Data.SessionBool
 			end
 		)
 		if not _Success then
@@ -348,34 +364,33 @@ function Module.GetData(Player, StoreString, JustJoined)
 		return
 	end
 	if Data then
-		MergeReplicatorTemplate(Deserialize(Data), STORES[StoreString].Default)
+		Data = MergeReplicatorTemplate(Deserialize(Data), StoreString)
 	else
-		Data = DeepCopy(STORES[StoreString].Default)
+		Data = DeepCopy(STORES[StoreString].Default, StoreString)
 	end
 	Data.DataId = Data.DataId or 1
 	Data.SessionBool = true
-	Data = Data or DeepCopy(STORES[StoreString].Default)
-	if not PlayersData[Player.Name] then
-		PlayersData[Player.Name] = {}
-	end
-	if not PlayersData[Player.Name][StoreString] then
+	if JustJoined then
+		if not PlayersData[Player.Name] then
+			PlayersData[Player.Name] = {}
+		end
 		PlayersData[Player.Name][StoreString] = Data
 	end
 	return Success, Data
 end
-function Module.UpdateData(Player, StoreString)
+function Module.UpdateData(Player, StoreString, IsLeaving)
 	WaitForRequestBudget(Enum.DataStoreRequestType.UpdateAsync) -- Backup that will most likely never yield
 	local Store = STORES[StoreString].Store
-	local Success, Value = pcall(function()
-		Store:UpdateAsync(DatastoreKey..Player.UserId, function(OldData)
-			local PreviousData = OldData or {DataId = 1}
-			local CurrentData = PlayersData[Player.Name][StoreString]
-			if CurrentData.DataId == PreviousData.DataId then
+	Store:UpdateAsync(DatastoreKey..Player.UserId, function(OldData)
+		local PreviousData = OldData or {DataId = 1}
+		local CurrentData = PlayersData[Player.Name][StoreString]
+		if CurrentData.DataId == PreviousData.DataId then
+			if IsLeaving then
 				CurrentData.DataId += 1
-				return Serialize(CurrentData)
-			end	
-			return nil
-		end)
+			end
+			return Serialize(CurrentData)
+		end	
+		return nil
 	end)
 end
 function Module.RawGetData(PlayerName, StoreString, Path)
@@ -398,15 +413,20 @@ local StoresSize = SizeOfTable(STORES)
 local Budget = nil
 local Threads = {}
 local Clock = os.clock()
+local CanStart = false
 RunService.Heartbeat:Connect(function()
+	if not CanStart then 
+		return 
+	end
 	local CurrentBudget = DataStoreService:GetRequestBudgetForRequestType(Enum.DataStoreRequestType.UpdateAsync)
 	local PlayerCount = #Players:GetPlayers()
 	if CurrentBudget ~= Budget then
 		Budget = CurrentBudget
 		AutoSaveTime = math.ceil(((PlayerCount * StoresSize * 6) / (PlayerCount + 6)) * MARGIN_OF_SAFETY)
-		-- print(AutoSaveTime)
 	end
-	if not AutoSaveTime then return end
+	if not AutoSaveTime then 
+		return 
+	end
 	if os.clock() - Clock > AutoSaveTime then
 		Clock = os.clock()
 		for _, PlayerObject in Threads do
@@ -416,10 +436,11 @@ RunService.Heartbeat:Connect(function()
 		end
 	end
 end)
-Players.PlayerAdded:Connect(function(Player)
+local function OnPlayerAdded(Player)
 	Player.CharacterAdded:Wait()
 	local function UpdateReplicators(Table)
 		for _, Value in Table do
+			print(Value)
 			if tostring(Value) == "Replicator" then
 				Value.Change(Value.Object, Player)
 				if type(Value.Object) == "table" then
@@ -451,7 +472,8 @@ Players.PlayerAdded:Connect(function(Player)
 		Module.GetData(Player, StoreString, true)
 		UpdateReplicators(PlayersData[Player.Name][StoreString])	
 	end
-end)
+end
+Players.PlayerAdded:Connect(OnPlayerAdded)
 Players.PlayerRemoving:Connect(function(Player)
 	if not Player.Character then return end
 	local PlayerObject = Threads[Player]
@@ -459,18 +481,25 @@ Players.PlayerRemoving:Connect(function(Player)
 		PlayerObject[StoreString].IsAlive = false
 		coroutine.resume(PlayerObject[StoreString].Coroutine)
 	end
+	task.wait()
 	Threads[Player] = nil
 	for StoreString, _ in STORES do
 		DataChangedSignals[Player.Name][StoreString]:DisconnectAll()
 		DataChangedSignals[Player.Name][StoreString] = nil
 		PlayersData[Player.Name][StoreString].SessionBool = false
-		Module.UpdateData(Player, StoreString)	
+		Module.UpdateData(Player, StoreString, true)	
 	end
+	PlayersData[Player.Name] = nil
 	DataChangedSignals[Player.Name] = nil
 end)
 game:BindToClose(function()
 	wait(1)
 end)
+for _, Player in Players:GetPlayers() do
+	OnPlayerAdded(Player)
+end
+task.wait(0.5)
+CanStart = true
 return {
 	Service = Module,
 	PlayersData = PlayersData,
