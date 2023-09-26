@@ -1,9 +1,9 @@
 local Players = game:GetService("Players")
-local ReplicatedSotrage = game:GetService("ReplicatedStorage")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local DataStoreService = game:GetService("DataStoreService")
 
-local SyncData = ReplicatedSotrage
+local SyncData = ReplicatedStorage
 					:WaitForChild("Remotes")
 					:WaitForChild("SyncData")
 local IsClient = RunService:IsClient()
