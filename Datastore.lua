@@ -383,7 +383,9 @@ function Module.UpdateData(Player, StoreString, IsLeaving)
 		local PreviousData = OldData or {DataId = 1}
 		local CurrentData = PlayersData[Player.Name][StoreString]
 		if CurrentData.DataId == PreviousData.DataId then
-			CurrentData.DataId += 1
+			if IsLeaving then
+				CurrentData.DataId += 1
+			end
 			return Serialize(CurrentData)
 		end	
 		return nil
